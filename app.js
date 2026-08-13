@@ -215,638 +215,86 @@ function signalCard(sig, price, a){
 function kpi(label,value,sub,cls=""){return `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${value}</div><div class="sub">${sub}</div></div>`}
 function watchRows(){
   return Object.entries(state.markets).map(([s,m])=>{
-   const market ==state.markets[state.symbol], price=market.t.price, analysis=signalAnalysis(market.candles), sig=analysis.signal, R=analysis.rsi, A=atr(market.candles), pnl=state.trades.reduce((a,x)=>a+(+x.pnl||0),0);
-    
+    const ch=m.t.change, sig=signal(m.candles);
     return `<div class="watch-row"><div class="watch-name">${s.replace("USDT","/USDT")}</div><div class="watch-price">${money(m.t.price)}</div><div class="watch-change ${ch>=0?"green":"red"}">${pct(ch)}<br><small>${sig}</small></div></div>`
   }).join("");
 }
 function pageDashboard(){
-  const m = state.markets[state.symbol];
-  if(!m) return;
-
-  const price = m.t.price;
-  const A = atr(m.candles);
-  const analysis = signalAnalysis(m.candles);
-  const sig = analysis.signal;
-  const R = analysis.rsi;
-  const pnl = state.trades.reduce((a,x)=>a+(+x.pnl||0),0);
-
-  const signalText =
-    sig === "BUY" ? "🟢 BUY" :
-    sig === "SELL" ? "🔴 SELL" :
-    "🟡 WAIT";
-
-  const signalClass =
-    sig === "BUY" ? "signal-buy" :
-    sig === "SELL" ? "signal-sell" :
-    "signal-wait";
-
-  const trendClass =
-    analysis.trend === "Bullish" ? "green" :
-    analysis.trend === "Bearish" ? "red" :
-    "yellow";
-
-  const reasonParts = analysis.reason
-    .split(" • ")
-    .map(x => `<div class="reason"><span>• ${x}</span></div>`)
-    .join("");
-
-  const sessionCandles = m.candles.slice(-50);
-  const sessionHigh = Math.max(...sessionCandles.map(x=>x.h));
-  const sessionLow = Math.min(...sessionCandles.map(x=>x.l));
-
-  $("dashboard").innerHTML = `
-
-    <!-- HEADER -->
-    <div class="hero-pro">
-      <div>
-        <h1>Trading Terminal</h1>
-        <p>Professional market workspace · technical analysis · paper execution</p>
-      </div>
-
-      <div class="hero-right">
-        <div class="live-badge">
-          <i></i> MARKET STREAM
-        </div>
-
-        <span class="status-chip ok">
-          AUTO 30S
-        </span>
-      </div>
-    </div>
-
-    <!-- PRICE HEADER -->
-    <div class="hero">
-
-      <div>
-        <div class="price-big">
-          ${money(price)}
-          <small>${state.symbol.replace("USDT","/USDT")}</small>
-        </div>
-
-        <p>
-          24h ${pct(m.t.change)}
-          · RSI ${R.toFixed(2)}
-          · ATR ${fmt(A)}
-        </p>
-      </div>
-
-      <div class="hero-actions">
-
-        <select class="select" id="tf">
-          <option value="1m">1m</option>
-          <option value="5m">5m</option>
-          <option value="15m">15m</option>
-          <option value="1h">1h</option>
-          <option value="4h">4h</option>
-        </select>
-
-        <button class="btn" id="fullRefresh">
-          ↻ Refresh
-        </button>
-
-      </div>
-    </div>
-
-    <!-- QUICK COMMAND -->
-    <div class="command-bar">
-      <span>⌕</span>
-
-      <input
-        id="quickSearch"
-        placeholder="Search BTCUSDT, ETHUSDT or command..."
-      />
-
-      <kbd>ENTER</kbd>
-    </div>
-
-    <!-- MARKET STRIP -->
+  const m=state.markets[state.symbol], price=m.t.price, sig=signal(m.candles), R=rsi(m.candles.map(x=>x.c)), A=atr(m.candles), pnl=state.trades.reduce((a,x)=>a+(+x.pnl||0),0);
+  $("dashboard").innerHTML=`
+    <div class="hero-pro"><div><h1>Trading Terminal</h1><p>Professional market workspace · technical signals · paper execution</p></div><div class="hero-right"><div class="live-badge"><i></i> MARKET STREAM</div><span class="status-chip ok">AUTO 30S</span></div></div>
+    <div class="hero"><div><div class="price-big">${money(price)} <small>${state.symbol.replace("USDT","/USDT")}</small></div><p>24h ${pct(m.t.change)} · RSI ${R.toFixed(1)} · ATR ${fmt(A)}</p></div><div class="hero-actions"><select class="select" id="tf"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>4h</option></select><button class="btn" id="fullRefresh">↻ Refresh</button></div></div>
+    <div class="command-bar"><span>⌕</span><input id="quickSearch" placeholder="Quick command: search market, symbol or action..." /><kbd>CTRL K</kbd></div>
     <div class="market-strip">
-
-      ${Object.entries(state.markets).map(([s,x]) => `
-        <div
-          class="strip-item"
-          data-symbol="${s}"
-          style="cursor:pointer"
-        >
-          <div class="s-top">
-            <span>${s.replace("USDT","/USDT")}</span>
-            <span>LIVE</span>
-          </div>
-
-          <div class="s-price">
-            ${money(x.t.price)}
-          </div>
-
-          <div class="s-change ${x.t.change >= 0 ? "green" : "red"}">
-            ${pct(x.t.change)}
-          </div>
-        </div>
-      `).join("")}
-
-      <div class="strip-item">
-        <div class="s-top">
-          <span>MODE</span>
-          <span>SAFE</span>
-        </div>
-
-        <div class="s-price">
-          PAPER
-        </div>
-
-        <div class="s-change green">
-          LIVE ORDERS OFF
-        </div>
-      </div>
-
+      ${Object.entries(state.markets).map(([s,x])=>`<div class="strip-item"><div class="s-top"><span>${s.replace("USDT","/USDT")}</span><span>LIVE</span></div><div class="s-price">${money(x.t.price)}</div><div class="s-change ${x.t.change>=0?"green":"red"}">${pct(x.t.change)}</div></div>`).join("")}
+      <div class="strip-item"><div class="s-top"><span>MODE</span><span>SAFE</span></div><div class="s-price">PAPER</div><div class="s-change green">LIVE ORDERS OFF</div></div>
+      <div class="strip-item"><div class="s-top"><span>REFRESH</span><span>30s</span></div><div class="s-price">AUTO</div><div class="s-change">Market data</div></div>
     </div>
-
-    <!-- KPI CARDS -->
     <div class="grid kpi-grid">
-
-      ${kpi(
-        "Market Price",
-        money(price),
-        "Current " + state.symbol.replace("USDT","/USDT")
-      )}
-
-      ${kpi(
-        "24h Change",
-        pct(m.t.change),
-        "Public market data",
-        m.t.change >= 0 ? "green" : "red"
-      )}
-
-      ${kpi(
-        "RSI",
-        R.toFixed(2),
-        "14-period momentum"
-      )}
-
-      ${kpi(
-        "ATR",
-        fmt(A),
-        "Current volatility"
-      )}
-
-      ${kpi(
-        "Paper Balance",
-        money(state.balance),
-        "Live orders disabled"
-      )}
-
+      ${kpi("Market Price",money(price),"Current " + state.symbol.replace("USDT","/USDT"))}
+      ${kpi("24h Change",pct(m.t.change),"Exchange market data",m.t.change>=0?"green":"red")}
+      ${kpi("RSI",R.toFixed(2),"14-period momentum")}
+      ${kpi("ATR",fmt(A),"Current volatility")}
+      ${kpi("Paper Balance",money(state.balance),"Live orders disabled")}
     </div>
-
-    <!-- MAIN TERMINAL -->
     <div class="grid layout">
-
-      <!-- CHART -->
-      <div class="card chart-card">
-
-        <div class="card-head">
-
-          <h3>
-            ${state.symbol.replace("USDT","/USDT")} · Price
-          </h3>
-
-          <div class="tabs">
-            <button class="tab active">Candles</button>
-            <button class="tab">EMA 9</button>
-            <button class="tab">EMA 21</button>
-          </div>
-
+      <div class="card chart-card"><div class="card-head"><h3>${state.symbol.replace("USDT","/USDT")} · Price</h3><div class="tabs"><button class="tab active">Candles</button><button class="tab">EMA 9</button><button class="tab">EMA 21</button></div></div><canvas id="chart"></canvas></div>
+      <div><div id="signalBox">${signalCard(sig,price,A)}
+        <div class="confidence"><div class="conf-head"><span>Signal confidence</span><b>72%</b></div><div class="conf-bar"><i></i></div></div>
+        <div class="signal-reasons">
+          <div class="reason"><span>EMA trend</span><strong class="green">Bullish</strong></div>
+          <div class="reason"><span>RSI momentum</span><strong>${R.toFixed(1)}</strong></div>
+          <div class="reason"><span>Volatility</span><strong>${fmt(A)}</strong></div>
         </div>
-
-        <canvas id="chart"></canvas>
-
-        <div class="chart-tools">
-          <span class="tool">EMA 9</span>
-          <span class="tool">EMA 21</span>
-          <span class="tool">RSI</span>
-          <span class="tool">Volume</span>
-        </div>
-
       </div>
-
-
-      <!-- RIGHT PANEL -->
-      <div>
-
-        <!-- SIGNAL -->
-        <div class="signal-card ${signalClass}">
-
-          <div class="signal-main">
-            ${signalText}
-          </div>
-
-          <div class="signal-note">
-            ${state.symbol.replace("USDT","/USDT")}
-            · Technical signal
-          </div>
-
-          <div class="signal-note">
-            ${sig === "BUY"
-              ? "Bullish conditions are currently confirmed."
-              : sig === "SELL"
-              ? "Bearish conditions are currently confirmed."
-              : "No strong entry condition at the moment."
-            }
-          </div>
-
-        </div>
-
-
-        <!-- CONFIDENCE -->
-        <div class="confidence">
-
-          <div class="conf-head">
-            <span>Signal confidence</span>
-            <b>${analysis.confidence}%</b>
-          </div>
-
-          <div class="conf-bar">
-            <i style="width:${analysis.confidence}%"></i>
-          </div>
-
-        </div>
-
-
-        <!-- TECHNICAL METRICS -->
-        <div class="card" style="margin-top:14px">
-
-          <div class="card-head">
-            <h3>Technical Analysis</h3>
-            <span class="status-chip">
-              LIVE
-            </span>
-          </div>
-
-          <div class="signal-reasons">
-
-            <div class="reason">
-              <span>EMA Trend</span>
-              <strong class="${trendClass}">
-                ${analysis.trend}
-              </strong>
-            </div>
-
-            <div class="reason">
-              <span>RSI</span>
-              <strong>${R.toFixed(2)}</strong>
-            </div>
-
-            <div class="reason">
-              <span>EMA 9</span>
-              <strong>${fmt(analysis.ema9)}</strong>
-            </div>
-
-            <div class="reason">
-              <span>EMA 21</span>
-              <strong>${fmt(analysis.ema21)}</strong>
-            </div>
-
-            <div class="reason">
-              <span>Momentum</span>
-              <strong class="${analysis.momentum >= 0 ? "green" : "red"}">
-                ${analysis.momentum >= 0 ? "+" : ""}
-                ${analysis.momentum.toFixed(2)}%
-              </strong>
-            </div>
-
-          </div>
-
-        </div>
-
-
-        <!-- WHY SIGNAL -->
-        <div class="card" style="margin-top:14px">
-
-          <div class="card-head">
-            <h3>Signal Reason</h3>
-            <span class="status-chip ok">
-              AI ANALYSIS
-            </span>
-          </div>
-
-          <div class="signal-reasons">
-            ${reasonParts}
-          </div>
-
-        </div>
-
-
-        <!-- QUICK PAPER ORDER -->
-        <div class="card" style="margin-top:14px">
-
-          <div class="card-head">
-            <h3>Quick Paper Order</h3>
-
-            <span class="status-chip warn">
-              DEMO
-            </span>
-          </div>
-
-          <div class="field">
-
-            <label>Amount (USDT)</label>
-
-            <input
-              id="quickAmount"
-              type="number"
-              value="100"
-              min="1"
-              step="1"
-            >
-
-          </div>
-
-          <div class="order-buttons" style="margin-top:12px">
-
-            <button
-              class="buy-btn"
-              id="quickBuy"
-            >
-              BUY
-            </button>
-
-            <button
-              class="sell-btn"
-              id="quickSell"
-            >
-              SELL
-            </button>
-
-          </div>
-
-          <div class="notice">
-            Paper trading only. No real exchange order will be sent.
-          </div>
-
-        </div>
-
-      </div>
-
+      <div class="card"><div class="card-head"><h3>Market Watchlist</h3><span class="status-chip ok">LIVE</span></div><div class="watch">${watchRows()}</div></div>
+      <div class="card" style="margin-top:14px"><div class="card-head"><h3>Order Flow</h3><span class="status-chip">PUBLIC DATA</span></div>
+        <div class="orderbook">
+          <div class="book-side"><h4>ASKS</h4><div class="book-row ask"><span>${fmt(price+A*.18)}</span><span>0.12</span><span>18%</span></div><div class="book-row ask"><span>${fmt(price+A*.09)}</span><span>0.21</span><span>31%</span></div><div class="book-row ask"><span>${fmt(price+A*.04)}</span><span>0.18</span><span>26%</span></div></div>
+          <div class="book-side"><h4>BIDS</h4><div class="book-row bid"><span>${fmt(price-A*.04)}</span><span>0.25</span><span>35%</span></div><div class="book-row bid"><span>${fmt(price-A*.09)}</span><span>0.19</span><span>27%</span></div><div class="book-row bid"><span>${fmt(price-A*.18)}</span><span>0.15</span><span>21%</span></div></div>
+        </div><div class="notice">Illustrative depth panel for the paper-trading interface; not used to place live orders.</div>
+      </div></div>
     </div>
-
-
-    <!-- SECONDARY PANELS -->
     <div class="grid bottom-grid">
-
-      <!-- MARKET WATCHLIST -->
-      <div class="card">
-
-        <div class="card-head">
-
-          <h3>Market Watchlist</h3>
-
-          <span class="status-chip ok">
-            LIVE
-          </span>
-
-        </div>
-
-        <div class="watch">
-
-          ${Object.entries(state.markets).map(([s,x]) => {
-
-            const a = signalAnalysis(x.candles);
-
-            return `
-              <div
-                class="watch-row"
-                data-symbol="${s}"
-                style="cursor:pointer"
-              >
-
-                <div class="watch-name">
-                  ${s.replace("USDT","/USDT")}
-                </div>
-
-                <div class="watch-price">
-                  ${money(x.ticker ? x.ticker.price : x.t.price)}
-                </div>
-
-                <div class="watch-change ${
-                  x.t.change >= 0 ? "green" : "red"
-                }">
-
-                  ${pct(x.t.change)}
-
-                  <br>
-
-                  <small>
-                    ${a.signal}
-                  </small>
-
-                </div>
-
-              </div>
-            `;
-
-          }).join("")}
-
-        </div>
-
-      </div>
-
-
-      <!-- PORTFOLIO RISK -->
       <div class="card position-card">
-
-        <div class="card-head">
-
-          <h3>Portfolio Risk</h3>
-
-          <span class="status-chip ok">
-            SAFE
-          </span>
-
-        </div>
-
-        <div class="metric-mini">
-          <span>Capital at risk</span>
-          <strong>1.0%</strong>
-        </div>
-
-        <div class="metric-mini">
-          <span>Daily loss limit</span>
-          <strong>2.5%</strong>
-        </div>
-
-        <div class="metric-mini">
-          <span>Open positions</span>
-          <strong>0</strong>
-        </div>
-
-        <div class="risk-box">
-
-          <div class="risk-head">
-            <span>Signal strength</span>
-            <b>${analysis.confidence}%</b>
-          </div>
-
-          <div class="risk-meter">
-            <i style="width:${analysis.confidence}%"></i>
-          </div>
-
-        </div>
-
+        <div class="card-head"><h3>Portfolio Risk</h3><span class="status-chip ok">LOW RISK</span></div>
+        <div class="metric-mini"><span>Capital at risk</span><strong>1.0%</strong></div>
+        <div class="metric-mini"><span>Daily loss limit</span><strong>2.5%</strong></div>
+        <div class="metric-mini"><span>Open positions</span><strong>0</strong></div>
+        <div class="risk-box"><div class="risk-head"><span>Risk utilization</span><b>28%</b></div><div class="risk-meter"><i></i></div></div>
       </div>
-
+      <div class="card position-card">
+        <div class="card-head"><h3>System Status</h3><span class="status-chip ok">ONLINE</span></div>
+        <div class="status-row"><span class="status-chip ok">● Market data</span><span class="status-chip ok">● Signal engine</span><span class="status-chip">● Journal</span></div>
+        <div class="sub" style="margin-top:14px">Automatic refresh every 30 seconds. Live exchange orders remain disabled.</div>
+      </div>
     </div>
-
-
-    <!-- ACCOUNT SNAPSHOT -->
-    <div class="section-title">
-      Account Snapshot
+    <div class="pro-bottom">
+      <div class="card"><div class="card-head"><h3>Market Sentiment</h3><span class="status-chip ok">BULLISH</span></div>
+        <div class="sentiment"><div class="sentiment-score">69</div><div class="sub">Composite market score</div><div class="gauge"><i></i></div><div class="sub">Fear & Greed style indicator · informational</div></div>
+      </div>
+      <div class="card"><div class="card-head"><h3>Session Stats</h3></div>
+        <div class="stat-list"><div class="stat-line"><span>Session high</span><b>${money(Math.max(...m.candles.slice(-50).map(x=>x.h)))}</b></div><div class="stat-line"><span>Session low</span><b>${money(Math.min(...m.candles.slice(-50).map(x=>x.l)))}</b></div><div class="stat-line"><span>Volatility</span><b>${fmt(A)}</b></div><div class="stat-line"><span>Trend</span><b class="green">${sig==="SELL"?"Bearish":sig==="BUY"?"Bullish":"Neutral"}</b></div></div>
+      </div>
+      <div class="card"><div class="card-head"><h3>Keyboard Shortcuts</h3></div>
+        <div class="shortcut"><span>Refresh market</span><kbd>R</kbd></div><div class="shortcut"><span>Dashboard</span><kbd>1</kbd></div><div class="shortcut"><span>Trade</span><kbd>2</kbd></div><div class="shortcut"><span>Analytics</span><kbd>3</kbd></div>
+      </div>
     </div>
-
+    <div class="section-title">Account Snapshot</div>
     <div class="grid kpi-grid">
-
-      ${kpi(
-        "Total P&L",
-        money(pnl),
-        "Paper trades only",
-        pnl >= 0 ? "green" : "red"
-      )}
-
-      ${kpi(
-        "Trades",
-        state.trades.length,
-        "Stored locally"
-      )}
-
-      ${kpi(
-        "Win Rate",
-        winRate() + "%",
-        "Paper trades"
-      )}
-
-      ${kpi(
-        "Drawdown",
-        drawdown() + "%",
-        "Peak-to-trough"
-      )}
-
-      ${kpi(
-        "System",
-        "ONLINE",
-        "Live trading OFF",
-        "green"
-      )}
-
-    </div>
-
-  `;
-
-
-  /* TIMEFRAME */
-  $("tf").value = state.timeframe;
-
-  $("tf").onchange = async e => {
-    state.timeframe = e.target.value;
-    await refresh();
-  };
-
-
-  /* REFRESH */
-  $("fullRefresh").onclick = refresh;
-
-
-  /* QUICK SEARCH */
-  const quickSearch = $("quickSearch");
-
-  if(quickSearch){
-
-    quickSearch.onkeydown = async e => {
-
-      if(e.key !== "Enter") return;
-
-      let q = quickSearch.value
-        .trim()
-        .toUpperCase()
-        .replace("/","");
-
-      if(q === "BTC" || q === "BTCUSDT"){
-        state.symbol = "BTCUSDT";
-        await refresh();
-      }
-      else if(q === "ETH" || q === "ETHUSDT"){
-        state.symbol = "ETHUSDT";
-        await refresh();
-      }
-      else if(q === "SOL" || q === "SOLUSDT"){
-        state.symbol = "SOLUSDT";
-        await refresh();
-      }
-      else{
-        toast("Try BTCUSDT, ETHUSDT or SOLUSDT");
-      }
-
-    };
-
-  }
-
-
-  /* MARKET CLICK */
-  document.querySelectorAll("[data-symbol]").forEach(el => {
-
-    el.onclick = async () => {
-
-      const symbol = el.dataset.symbol;
-
-      if(!symbol) return;
-
-      state.symbol = symbol;
-
-      await refresh();
-
-    };
-
-  });
-
-
-  /* PAPER BUY */
-  $("quickBuy").onclick = () => {
-
-    const amount = Number(
-      $("quickAmount").value || 100
-    );
-
-    if(amount <= 0){
-      toast("Enter a valid amount");
-      return;
-    }
-
-    $("amount") && ($("amount").value = amount);
-
-    paperOrder("BUY");
-
-  };
-
-
-  /* PAPER SELL */
-  $("quickSell").onclick = () => {
-
-    const amount = Number(
-      $("quickAmount").value || 100
-    );
-
-    if(amount <= 0){
-      toast("Enter a valid amount");
-      return;
-    }
-
-    $("amount") && ($("amount").value = amount);
-
-    paperOrder("SELL");
-
-  };
-
-
-  /* DRAW CHART */
+      ${kpi("Total P&L",money(pnl),"Paper trades only",pnl>=0?"green":"red")}
+      ${kpi("Trades",state.trades.length,"Stored locally")}
+      ${kpi("Win Rate",winRate()+"%","Completed paper trades")}
+      ${kpi("Max Drawdown",drawdown()+"%","From recorded P&L")}
+      ${kpi("Status","SAFE","Live trading OFF")}
+    </div>`;
+  const quick=$("quickSearch"); if(quick){ quick.onkeydown=e=>{ if(e.key==="Enter"){ const q=quick.value.trim().toUpperCase().replace("/",""); if(q==="BTCUSDT"||q==="ETHUSDT"){state.symbol=q;refresh()} else toast("Try BTCUSDT or ETHUSDT"); } }; }
+  $("tf").value=state.timeframe;
+  $("tf").onchange=async e=>{state.timeframe=e.target.value;await refresh()};
+  $("fullRefresh").onclick=refresh;
   chartSvg(m.candles);
-}if(!state.trades.length)return "0.0";return (state.trades.filter(x=>+x.pnl>0).length/state.trades.length*100).toFixed(1)}
+}
+function winRate(){if(!state.trades.length)return "0.0";return (state.trades.filter(x=>+x.pnl>0).length/state.trades.length*100).toFixed(1)}
 function drawdown(){let eq=state.balance,peak=eq,max=0;for(const t of state.trades){eq+=+t.pnl||0;peak=Math.max(peak,eq);max=Math.max(max,(peak-eq)/peak*100)}return max.toFixed(1)}
 function pageMarkets(){
   const rows=Object.entries(state.markets).map(([s,m])=>`<tr><td><b>${s.replace("USDT","/USDT")}</b></td><td>${money(m.t.price)}</td><td class="${m.t.change>=0?"green":"red"}">${pct(m.t.change)}</td><td>${rsi(m.candles.map(x=>x.c)).toFixed(2)}</td><td><span class="badge2 ${signal(m.candles)==="BUY"?"win":signal(m.candles)==="SELL"?"loss":""}">${signal(m.candles)}</span></td></tr>`).join("");
