@@ -53,10 +53,20 @@ async function fetchKlines(symbol, interval="5m", limit=180){
   return rows.map(r=>({t:r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]}));
 }
 async function fetchTicker(symbol){
-  const res=await fetch(`${API}/ticker?symbol=${symbol}`);
-  if(!res.ok)throw new Error("Ticker unavailable");
-  const x=await res.json();
-  return {price:+x.lastPrice, change:+x.priceChangePercent};
+  const res = await fetch(`${API}/ticker?symbol=${symbol}&_=${Date.now()}`, {
+    cache: "no-store"
+  });
+  if (!res.ok) {
+    throw new Error(`Ticker HTTP ${res.status}`);
+  }
+  const x = await res.json();
+  if (!x.lastPrice) {
+    throw new Error("Ticker data missing");
+  }
+  return {
+    price: Number(x.lastPrice),
+    change: Number(x.priceChangePercent || 0)
+  };
 }
 async function loadSymbol(symbol){
   const [candles,t]=await Promise.all([fetchKlines(symbol,state.timeframe,180),fetchTicker(symbol)]);
