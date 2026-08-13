@@ -5,7 +5,7 @@ from urllib.request import Request, urlopen
 import json
 import os
 
-PORT = 8000
+PORT = int(os.environ.get("PORT", "8000"))
 BINANCE = "https://api.binance.com/api/v3"
 
 class Handler(SimpleHTTPRequestHandler):
@@ -55,9 +55,9 @@ if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     print("=" * 58)
     print("  CryptoBot Pro - Professional UI")
-    print("  Local server: http://localhost:8000")
+    print(f"  Server port: {PORT}")
     print("  Market-data proxy: ENABLED")
     print("  Live trading: DISABLED")
     print("=" * 58)
     print("Keep this window open while using the dashboard.")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
