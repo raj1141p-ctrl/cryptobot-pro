@@ -240,7 +240,7 @@ function pageDashboard(){
     <div class="grid layout">
       <div class="card chart-card"><div class="card-head"><h3>${state.symbol.replace("USDT","/USDT")} · Price</h3><div class="tabs"><button class="tab active">Candles</button><button class="tab">EMA 9</button><button class="tab">EMA 21</button></div></div><canvas id="chart"></canvas></div>
       <div><div id="signalBox">${signalCard(sig,price,A)}
-        <div class="confidence"><div class="conf-head"><span>Signal confidence</span><b>72%</b></div><div class="conf-bar"><i></i></div></div>
+        <div class="confidence"><div class="conf-head"><span>Signal confidence</span><b><b>${analysis.confidence}%</b></b></div><div class="conf-bar"><i style="width:${analysis.confidence}%"></i></div></div>
         <div class="signal-reasons">
           <div class="reason"><span>EMA trend</span><strong class="green">Bullish</strong></div>
           <div class="reason"><span>RSI momentum</span><strong>${R.toFixed(1)}</strong></div>
@@ -261,7 +261,7 @@ function pageDashboard(){
         <div class="metric-mini"><span>Capital at risk</span><strong>1.0%</strong></div>
         <div class="metric-mini"><span>Daily loss limit</span><strong>2.5%</strong></div>
         <div class="metric-mini"><span>Open positions</span><strong>0</strong></div>
-        <div class="risk-box"><div class="risk-head"><span>Risk utilization</span><b>28%</b></div><div class="risk-meter"><i></i></div></div>
+        <div class="risk-box"><div class="risk-head"><span>Risk utilization</span><b>28%</b></div><div class="risk-meter"><i style="width:${analysis.confidence}%"></i></div></div>
       </div>
       <div class="card position-card">
         <div class="card-head"><h3>System Status</h3><span class="status-chip ok">ONLINE</span></div>
