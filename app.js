@@ -39,12 +39,108 @@ function atr(data, period=14){
   for(let i=1;i<data.length;i++)tr.push(Math.max(data[i].h-data[i].l,Math.abs(data[i].h-data[i-1].c),Math.abs(data[i].l-data[i-1].c)));
   return tr.slice(-period).reduce((a,b)=>a+b,0)/period;
 }
+function signalAnalysis(data){
+  if(!data || data.length < 30){
+    return {
+      signal:"WAIT",
+      confidence:0,
+      reason:"Not enough market data",
+      trend:"Unknown",
+      rsi:50,
+      ema9:0,
+      ema21:0,
+      momentum:0
+    };
+  }
+
+  const closes=data.map(x=>x.c);
+  const e9=ema(closes,9);
+  const e21=ema(closes,21);
+  const R=rsi(closes,14);
+
+  const price=closes[closes.length-1];
+  const oldPrice=closes[closes.length-6] || closes[0];
+
+  const momentum=((price-oldPrice)/oldPrice)*100;
+
+  const bullish=e9[e9.length-1] > e21[e21.length-1];
+  const trend=bullish ? "Bullish" : "Bearish";
+
+  let buy=0;
+  let sell=0;
+  const reasons=[];
+
+  if(bullish){
+    buy+=2;
+    reasons.push("EMA 9 above EMA 21");
+  }else{
+    sell+=2;
+    reasons.push("EMA 9 below EMA 21");
+  }
+
+  if(price > e21[e21.length-1]){
+    buy++;
+    reasons.push("Price above EMA 21");
+  }else{
+    sell++;
+    reasons.push("Price below EMA 21");
+  }
+
+  if(R >= 55 && R < 70){
+    buy+=2;
+    reasons.push("RSI confirms bullish momentum");
+  }else if(R <= 45 && R > 30){
+    sell+=2;
+    reasons.push("RSI confirms bearish momentum");
+  }else if(R >= 70){
+    sell++;
+    reasons.push("RSI is overbought");
+  }else if(R <= 30){
+    buy++;
+    reasons.push("RSI is oversold");
+  }else{
+    reasons.push("RSI is neutral");
+  }
+
+  if(momentum > 0.05){
+    buy++;
+    reasons.push("Positive short-term momentum");
+  }else if(momentum < -0.05){
+    sell++;
+    reasons.push("Negative short-term momentum");
+  }else{
+    reasons.push("Weak short-term momentum");
+  }
+
+  let signal="WAIT";
+  let confidence=45;
+
+  if(buy >= 5 && buy > sell + 1){
+    signal="BUY";
+    confidence=Math.min(95,55+(buy-sell)*10);
+  }
+  else if(sell >= 5 && sell > buy + 1){
+    signal="SELL";
+    confidence=Math.min(95,55+(sell-buy)*10);
+  }
+  else{
+    confidence=Math.min(74,45+Math.abs(buy-sell)*8);
+  }
+
+  return {
+    signal,
+    confidence,
+    reason:reasons.join(" • "),
+    trend,
+    rsi:R,
+    ema9:e9[e9.length-1],
+    ema21:e21[e21.length-1],
+    momentum
+  };
+}
+
 function signal(data){
-  const closes=data.map(x=>x.c), e9=ema(closes,9), e21=ema(closes,21), R=rsi(closes,14);
-  const prevDiff=e9[e9.length-2]-e21[e21.length-2], diff=e9[e9.length-1]-e21[e21.length-1];
-  if(prevDiff<=0 && diff>0 && R>=52)return "BUY";
-  if(prevDiff>=0 && diff<0 && R<=48)return "SELL";
-  return "WAIT";
+  return signalAnalysis(data).signal;
 }
 async function fetchKlines(symbol, interval="5m", limit=180){
   const res=await fetch(`${API}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
