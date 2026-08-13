@@ -220,7 +220,7 @@ function watchRows(){
   }).join("");
 }
 function pageDashboard(){
-  const m=state.markets[state.symbol], price=m.t.price, sig=signal(m.candles), R=rsi(m.candles.map(x=>x.c)), A=atr(m.candles), pnl=state.trades.reduce((a,x)=>a+(+x.pnl||0),0);
+const m=state.markets[state.symbol], price=m.t.price, analysis=signalAnalysis(m.candles), sig=analysis.signal, R=analysis.rsi, A=atr(m.candles), pnl=state.trades.reduce((a,x)=>a+(+x.pnl||0),0);
   $("dashboard").innerHTML=`
     <div class="hero-pro"><div><h1>Trading Terminal</h1><p>Professional market workspace · technical signals · paper execution</p></div><div class="hero-right"><div class="live-badge"><i></i> MARKET STREAM</div><span class="status-chip ok">AUTO 30S</span></div></div>
     <div class="hero"><div><div class="price-big">${money(price)} <small>${state.symbol.replace("USDT","/USDT")}</small></div><p>24h ${pct(m.t.change)} · RSI ${R.toFixed(1)} · ATR ${fmt(A)}</p></div><div class="hero-actions"><select class="select" id="tf"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>4h</option></select><button class="btn" id="fullRefresh">↻ Refresh</button></div></div>
