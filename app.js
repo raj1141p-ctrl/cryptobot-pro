@@ -215,7 +215,8 @@ function signalCard(sig, price, a){
 function kpi(label,value,sub,cls=""){return `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${value}</div><div class="sub">${sub}</div></div>`}
 function watchRows(){
   return Object.entries(state.markets).map(([s,m])=>{
-    const ch=m.t.change, sig=signal(m.candles);
+   const m=state.markets[state.symbol], price=m.t.price, analysis=signalAnalysis(m.candles), sig=analysis.signal, R=analysis.rsi, A=atr(m.candles), pnl=state.trades.reduce((a,x)=>a+(+x.pnl||0),0);
+    
     return `<div class="watch-row"><div class="watch-name">${s.replace("USDT","/USDT")}</div><div class="watch-price">${money(m.t.price)}</div><div class="watch-change ${ch>=0?"green":"red"}">${pct(ch)}<br><small>${sig}</small></div></div>`
   }).join("");
 }
