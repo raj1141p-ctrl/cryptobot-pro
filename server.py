@@ -1,3 +1,4 @@
+
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
@@ -5,11 +6,7 @@ import json
 import os
 
 PORT = int(os.environ.get("PORT", "8000"))
-
-# Public market-data-only Binance endpoint.
-# This avoids the api.binance.com endpoint that returned HTTP 451 on Render.
-BINANCE = "https://data-api.binance.vision/api/v3"
-
+BINANCE = "https://api.binance.com/api/v3"
 
 class Handler(SimpleHTTPRequestHandler):
     def _json(self, obj, status=200):
@@ -25,29 +22,17 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
 
         if parsed.path == "/api/health":
-            return self._json({
-                "status": "ok",
-                "service": "CryptoBot Pro backend",
-                "market_data": "Binance public market data"
-            })
+            return self._json({"status": "ok", "service": "CryptoBot Pro backend"})
 
         if parsed.path in ("/api/klines", "/api/ticker"):
             try:
                 query = parse_qs(parsed.query)
-                allowed = (
-                    {"symbol", "interval", "limit"}
-                    if parsed.path.endswith("klines")
-                    else {"symbol"}
-                )
-
+                allowed = {"symbol", "interval", "limit"} if parsed.path.endswith("klines") else {"symbol"}
                 params = []
                 for key, vals in query.items():
                     if key in allowed and vals:
                         params.append(f"{key}={vals[0]}")
-
-                endpoint = "/klines" if parsed.path.endswith("klines") else "/ticker/24hr"
-                url = BINANCE + endpoint
-
+                url = BINANCE + ("/klines" if parsed.path.endswith("klines") else "/ticker/24hr")
                 if params:
                     url += "?" + "&".join(params)
 
@@ -58,26 +43,21 @@ class Handler(SimpleHTTPRequestHandler):
                         "Accept": "application/json",
                     },
                 )
-
                 with urlopen(req, timeout=10) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-
                 return self._json(payload)
-
             except Exception as exc:
                 return self._json({"error": str(exc)}, 502)
 
         return super().do_GET()
 
-
 if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
     print("=" * 58)
     print("  CryptoBot Pro - Professional UI")
     print(f"  Server port: {PORT}")
     print("  Market-data proxy: ENABLED")
     print("  Live trading: DISABLED")
     print("=" * 58)
-
+    print("Keep this window open while using the dashboard.")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

@@ -7,7 +7,9 @@ const state = {
   markets: {},
   lastSignal: "WAIT",
   balance: Number(localStorage.getItem("cb_balance") || 10000),
-  trades: JSON.parse(localStorage.getItem("cb_trades") || "[]")
+  trades: JSON.parse(localStorage.getItem("cb_trades") || "[]"),
+  positions: JSON.parse(localStorage.getItem("cb_positions") || "[]"),
+  chartZoom: Number(localStorage.getItem("cb_chart_zoom") || 1)
 };
 
 const $ = id => document.getElementById(id);
@@ -53,50 +55,242 @@ async function fetchKlines(symbol, interval="5m", limit=180){
   return rows.map(r=>({t:r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]}));
 }
 async function fetchTicker(symbol){
-  const res = await fetch(`${API}/ticker?symbol=${symbol}&_=${Date.now()}`, {
-    cache: "no-store"
-  });
-
-  if (!res.ok) {
-    throw new Error(`Ticker HTTP ${res.status}`);
-  }
-
-  const x = await res.json();
-
-  if (!x.lastPrice) {
-    throw new Error("Ticker data missing");
-  }
-
-  return {
-    price: Number(x.lastPrice),
-    change: Number(x.priceChangePercent || 0)
-  };
+  const res=await fetch(`${API}/ticker?symbol=${symbol}`);
+  if(!res.ok)throw new Error("Ticker unavailable");
+  const x=await res.json();
+  return {price:+x.lastPrice, change:+x.priceChangePercent};
 }
 async function loadSymbol(symbol){
   const [candles,t]=await Promise.all([fetchKlines(symbol,state.timeframe,180),fetchTicker(symbol)]);
   state.markets[symbol]={candles,t};
   return state.markets[symbol];
 }
+let tvChart=null;
+let candleSeries=null;
+let ema9Series=null;
+let ema21Series=null;
+let volumeSeries=null;
+let chartResizeObserver=null;
+
 function chartSvg(data){
-  const canvas=$("chart"), ctx=canvas.getContext("2d");
-  const dpr=window.devicePixelRatio||1, W=canvas.clientWidth, H=canvas.clientHeight;
-  canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.fillStyle="#0b1119";ctx.fillRect(0,0,W,H);
-  const pad={l:52,r:18,t:18,b:30}, w=W-pad.l-pad.r,h=H-pad.t-pad.b;
-  const visible=data.slice(-100), hi=Math.max(...visible.map(x=>x.h)), lo=Math.min(...visible.map(x=>x.l));
-  const y=p=>pad.t+(hi-p)/(hi-lo)*h, x=i=>pad.l+i/(visible.length-1)*w;
-  ctx.strokeStyle="#182535";ctx.lineWidth=1;
-  for(let i=0;i<5;i++){const yy=pad.t+i*h/4;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(W-pad.r,yy);ctx.stroke();
-    const val=hi-(hi-lo)*i/4;ctx.fillStyle="#65748a";ctx.font="10px system-ui";ctx.fillText(fmt(val),7,yy+3)}
-  const e9=ema(visible.map(z=>z.c),9),e21=ema(visible.map(z=>z.c),21);
-  visible.forEach((z,i)=>{
-    const xx=x(i),yo=y(z.o),yc=y(z.c),yh=y(z.h),yl=y(z.l), up=z.c>=z.o;
-    ctx.strokeStyle=up?"#2bd481":"#ff5a72";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(xx,yh);ctx.lineTo(xx,yl);ctx.stroke();
-    const bh=Math.max(1,Math.abs(yc-yo));ctx.fillStyle=up?"#2bd481":"#ff5a72";ctx.fillRect(xx-3,Math.min(yo,yc),6,bh);
-  });
-  function line(vals,color){ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();vals.forEach((v,i)=>{const xx=x(i),yy=y(v);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke()}
-  line(e9,"#55a1ff");line(e21,"#ffb24a");
+  const container=$("chart");
+  if(!container || !data?.length || !window.LightweightCharts) return;
+
+  const width=container.clientWidth||800;
+  const height=container.clientHeight||500;
+
+  if(!tvChart){
+    tvChart=LightweightCharts.createChart(container,{
+      width,
+      height,
+      layout:{
+        background:{type:"solid",color:"#0b0f14"},
+        textColor:"#8b98a9",
+        fontFamily:"Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
+        fontSize:11
+      },
+      grid:{
+        vertLines:{color:"#151c25"},
+        horzLines:{color:"#151c25"}
+      },
+      crosshair:{
+        mode:LightweightCharts.CrosshairMode.Normal,
+        vertLine:{color:"#596779",width:1,style:2,labelBackgroundColor:"#293545"},
+        horzLine:{color:"#596779",width:1,style:2,labelBackgroundColor:"#293545"}
+      },
+      rightPriceScale:{
+        borderColor:"#26303c",
+        scaleMargins:{top:.08,bottom:.12},
+        autoScale:true
+      },
+      timeScale:{
+        borderColor:"#26303c",
+        timeVisible:true,
+        secondsVisible:false,
+        rightOffset:4,
+        barSpacing:7,
+        minBarSpacing:2,
+        fixLeftEdge:false
+      },
+      handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false},
+      handleScale:{mouseWheel:true,pinch:true,axisPressedMouseMove:true}
+    });
+
+    candleSeries=tvChart.addCandlestickSeries({
+      upColor:"#26a69a",
+      downColor:"#ef5350",
+      borderUpColor:"#26a69a",
+      borderDownColor:"#ef5350",
+      wickUpColor:"#26a69a",
+      wickDownColor:"#ef5350",
+      priceLineVisible:true,
+      lastValueVisible:true,
+      priceFormat:{type:"price",precision:2,minMove:.01}
+    });
+
+    ema9Series=tvChart.addLineSeries({
+      color:"#4da3ff",lineWidth:1,priceLineVisible:false,lastValueVisible:false
+    });
+    ema21Series=tvChart.addLineSeries({
+      color:"#f6b44d",lineWidth:1,priceLineVisible:false,lastValueVisible:false
+    });
+
+    volumeSeries=tvChart.addHistogramSeries({
+      color:"#35536b",
+      priceFormat:{type:"volume"},
+      priceScaleId:"volume",
+      scaleMargins:{top:.82,bottom:0}
+    });
+
+    chartResizeObserver=new ResizeObserver(entries=>{
+      for(const entry of entries){
+        const r=entry.contentRect;
+        if(tvChart) tvChart.resize(Math.max(1,r.width),Math.max(1,r.height));
+      }
+    });
+    chartResizeObserver.observe(container);
+
+    tvChart.subscribeCrosshairMove(param=>{
+      if(!param.time || !param.seriesData) return;
+      const c=param.seriesData.get(candleSeries);
+      if(!c) return;
+      const title=document.querySelector(".live-price-line");
+      if(title && c.close!=null){
+        title.dataset.crosshairPrice=String(c.close);
+      }
+    });
+  }
+
+  const visible=data.slice(-Math.max(40,Math.min(data.length,Math.round(160/(state.chartZoom||1)))));
+  candleSeries.setData(visible.map(x=>({
+    time:Math.floor(Number(x.t)/1000),
+    open:x.o,high:x.h,low:x.l,close:x.c
+  })));
+
+  const closes=visible.map(x=>x.c);
+  const e9=ema(closes,9), e21=ema(closes,21);
+  ema9Series.setData(visible.map((x,i)=>({time:Math.floor(Number(x.t)/1000),value:e9[i]})).filter(x=>Number.isFinite(x.value)));
+  ema21Series.setData(visible.map((x,i)=>({time:Math.floor(Number(x.t)/1000),value:e21[i]})).filter(x=>Number.isFinite(x.value)));
+  volumeSeries.setData(visible.map(x=>({
+    time:Math.floor(Number(x.t)/1000),
+    value:Number(x.v)||0,
+    color:x.c>=x.o?"rgba(38,166,154,.35)":"rgba(239,83,80,.35)"
+  })));
+
+  const range=tvChart.timeScale();
+  range.applyOptions({barSpacing:Math.max(3,Math.min(14,7*(state.chartZoom||1)))});
+
+  // Keep the newest candle in view on initial load and live updates.
+  if(!container.dataset.ready){
+    range.fitContent();
+    container.dataset.ready="1";
+  }
 }
+
+function destroyChart(){
+  if(chartResizeObserver){chartResizeObserver.disconnect();chartResizeObserver=null;}
+  if(tvChart){tvChart.remove();tvChart=null;candleSeries=null;ema9Series=null;ema21Series=null;volumeSeries=null;}
+}
+
+
+let liveSocket=null;
+let liveSocketSymbol="";
+let liveSocketInterval="";
+let liveReconnectTimer=null;
+
+function closeLiveStream(){
+  if(liveReconnectTimer) clearTimeout(liveReconnectTimer);
+  liveReconnectTimer=null;
+  if(liveSocket){
+    try{liveSocket.onclose=null;liveSocket.close();}
+    catch(e){}
+  }
+  liveSocket=null;
+}
+
+function startLiveStream(){
+  closeLiveStream();
+
+  const symbol=state.symbol.toLowerCase();
+  const interval=state.timeframe || "5m";
+  liveSocketSymbol=symbol;
+  liveSocketInterval=interval;
+
+  const url=`wss://stream.binance.com:9443/ws/${symbol}@kline_${interval}`;
+
+  try{
+    liveSocket=new WebSocket(url);
+
+    liveSocket.onopen=()=>{
+      const badge=document.querySelector(".stream-status");
+      if(badge) badge.innerHTML='<i></i> LIVE STREAM';
+    };
+
+    liveSocket.onmessage=(event)=>{
+      try{
+        const msg=JSON.parse(event.data);
+        const k=msg.k;
+        if(!k) return;
+
+        if(liveSocketSymbol!==symbol || liveSocketInterval!==interval) return;
+
+        const m=state.markets[state.symbol];
+        if(!m) return;
+
+        const candle={
+          t:Number(k.t),
+          o:Number(k.o),
+          h:Number(k.h),
+          l:Number(k.l),
+          c:Number(k.c),
+          v:Number(k.v)
+        };
+
+        const last=m.candles[m.candles.length-1];
+
+        if(last && Number(last.t)===candle.t){
+          m.candles[m.candles.length-1]=candle;
+        }else{
+          m.candles.push(candle);
+          if(m.candles.length>300) m.candles.shift();
+        }
+
+        m.t.price=candle.c;
+
+        const priceNode=document.getElementById("livePrice");
+        const changeNode=document.getElementById("liveChange");
+        const ticketNode=document.getElementById("proOrderPrice");
+
+        if(priceNode) priceNode.textContent=money(candle.c);
+        if(ticketNode) ticketNode.textContent=money(candle.c);
+
+        if(changeNode){
+          changeNode.textContent=(m.t.change>=0?"+":"")+m.t.change.toFixed(2)+"%";
+          changeNode.className=m.t.change>=0?"green":"red";
+        }
+
+        const chart=document.getElementById("chart");
+        if(chart) chartSvg(m.candles);
+      }catch(e){}
+    };
+
+    liveSocket.onerror=()=>{
+      const badge=document.querySelector(".stream-status");
+      if(badge) badge.innerHTML='<i class="offline-dot"></i> RECONNECTING';
+    };
+
+    liveSocket.onclose=()=>{
+      if(liveSocketSymbol===symbol && liveSocketInterval===interval){
+        const badge=document.querySelector(".stream-status");
+        if(badge) badge.innerHTML='<i class="offline-dot"></i> RECONNECTING';
+        liveReconnectTimer=setTimeout(startLiveStream,3000);
+      }
+    };
+  }catch(e){
+    liveReconnectTimer=setTimeout(startLiveStream,3000);
+  }
+}
+
 function renderHeader(t){
   $("headerSymbol").textContent=state.symbol.replace("USDT","/USDT");
   $("headerPrice").textContent=money(t.price);
@@ -123,6 +317,12 @@ function watchRows(){
     return `<div class="watch-row"><div class="watch-name">${s.replace("USDT","/USDT")}</div><div class="watch-price">${money(m.t.price)}</div><div class="watch-change ${ch>=0?"green":"red"}">${pct(ch)}<br><small>${sig}</small></div></div>`
   }).join("");
 }
+function openPositionRows(){
+  if(!state.positions.length)return '<div class="empty">No open paper positions. Use the Trade page to open one.</div>';
+  return state.positions.map(p=>{const m=state.markets[p.symbol],cur=m?.t?.price||p.entry;const pnl=(cur-p.entry)*(p.amount/p.entry);return `<div class="position-row"><div><b>${p.symbol.replace("USDT","/USDT")}</b><span class="side-tag buy">${p.side}</span><small>Entry ${money(p.entry)} · ${money(p.amount)}</small></div><div class="position-right"><b class="${pnl>=0?"green":"red"}">${pnl>=0?"+":""}${money(pnl)}</b><small>Now ${money(cur)}</small></div></div>`}).join('');
+}
+function positionCount(){return state.positions.length}
+
 function pageDashboard(){
   const m=state.markets[state.symbol], price=m.t.price, sig=signal(m.candles), R=rsi(m.candles.map(x=>x.c)), A=atr(m.candles), pnl=state.trades.reduce((a,x)=>a+(+x.pnl||0),0);
   $("dashboard").innerHTML=`
@@ -141,24 +341,79 @@ function pageDashboard(){
       ${kpi("ATR",fmt(A),"Current volatility")}
       ${kpi("Paper Balance",money(state.balance),"Live orders disabled")}
     </div>
-    <div class="grid layout">
-      <div class="card chart-card"><div class="card-head"><h3>${state.symbol.replace("USDT","/USDT")} · Price</h3><div class="tabs"><button class="tab active">Candles</button><button class="tab">EMA 9</button><button class="tab">EMA 21</button></div></div><canvas id="chart"></canvas></div>
-      <div><div id="signalBox">${signalCard(sig,price,A)}
-        <div class="confidence"><div class="conf-head"><span>Signal confidence</span><b>72%</b></div><div class="conf-bar"><i></i></div></div>
-        <div class="signal-reasons">
-          <div class="reason"><span>EMA trend</span><strong class="green">Bullish</strong></div>
-          <div class="reason"><span>RSI momentum</span><strong>${R.toFixed(1)}</strong></div>
-          <div class="reason"><span>Volatility</span><strong>${fmt(A)}</strong></div>
+    <div class="terminal-grid">
+      <section class="card chart-card pro-chart" id="chartCard">
+        <div class="chart-topbar">
+          <div class="chart-title">
+            <div class="symbol-line"><span class="symbol-dot"></span><strong>${state.symbol.replace("USDT","/USDT")}</strong><span class="market-live">LIVE</span></div>
+            <div class="live-price-line"><span id="livePrice">${money(price)}</span><span id="liveChange" class="${m.t.change>=0?"green":"red"}">${pct(m.t.change)}</span></div>
+          </div>
+          <div class="chart-actions">
+            <button class="tool active" id="zoomReset">100%</button>
+            <button class="tool" id="zoomOut">−</button>
+            <button class="tool" id="zoomIn">+</button>
+            <button class="tool" id="chartFullscreen">⛶</button>
+          </div>
         </div>
-      </div>
-      <div class="card"><div class="card-head"><h3>Market Watchlist</h3><span class="status-chip ok">LIVE</span></div><div class="watch">${watchRows()}</div></div>
-      <div class="card" style="margin-top:14px"><div class="card-head"><h3>Order Flow</h3><span class="status-chip">PUBLIC DATA</span></div>
-        <div class="orderbook">
-          <div class="book-side"><h4>ASKS</h4><div class="book-row ask"><span>${fmt(price+A*.18)}</span><span>0.12</span><span>18%</span></div><div class="book-row ask"><span>${fmt(price+A*.09)}</span><span>0.21</span><span>31%</span></div><div class="book-row ask"><span>${fmt(price+A*.04)}</span><span>0.18</span><span>26%</span></div></div>
-          <div class="book-side"><h4>BIDS</h4><div class="book-row bid"><span>${fmt(price-A*.04)}</span><span>0.25</span><span>35%</span></div><div class="book-row bid"><span>${fmt(price-A*.09)}</span><span>0.19</span><span>27%</span></div><div class="book-row bid"><span>${fmt(price-A*.18)}</span><span>0.15</span><span>21%</span></div></div>
-        </div><div class="notice">Illustrative depth panel for the paper-trading interface; not used to place live orders.</div>
-      </div></div>
+        <div class="timeframe-bar">
+          ${["1m","5m","15m","1h","4h"].map(tf=>`<button class="tf-btn ${state.timeframe===tf?"active":""}" data-tf="${tf}">${tf}</button>`).join("")}
+          <span class="stream-status"><i></i> LIVE STREAM</span>
+        </div>
+        <div class="chart-stage"><canvas id="chart"></canvas><div class="chart-live-line"><span>LIVE</span></div></div>
+        <div class="chart-footer">
+          <span>EMA 9 <b class="ema-blue">●</b></span>
+          <span>EMA 21 <b class="ema-orange">●</b></span>
+          <span>Public market data</span>
+        </div>
+      </section>
+
+      <aside class="terminal-side">
+        <div class="card order-ticket-pro" id="proOrderTicket">
+          <div class="side-head"><h3>Order Ticket</h3><span class="paper-badge">PAPER</span></div>
+          <div class="side-price"><span>Market price</span><strong id="proOrderPrice">${money(price)}</strong></div>
+          <div class="order-side-toggle">
+            <button class="order-side buy active" id="proBuyTab">BUY</button>
+            <button class="order-side sell" id="proSellTab">SELL</button>
+          </div>
+          <label class="label">Order size (USDT)</label>
+          <input class="input" id="proAmount" type="number" min="1" step="1" value="100">
+          <div class="two-col">
+            <div><label class="label">Stop loss</label><input class="input" id="proSL" type="number" step="0.01" placeholder="Optional"></div>
+            <div><label class="label">Take profit</label><input class="input" id="proTP" type="number" step="0.01" placeholder="Optional"></div>
+          </div>
+          <div class="ticket-stats">
+            <div><span>Available</span><b>${money(state.balance)}</b></div>
+            <div><span>RSI</span><b>${R.toFixed(1)}</b></div>
+            <div><span>ATR</span><b>${fmt(A)}</b></div>
+          </div>
+          <button class="pro-execute buy" id="proExecute">BUY PAPER</button>
+          <div class="order-warning">Paper mode · no live orders</div>
+        </div>
+
+        <div class="card signal-pro">
+          <div class="side-head"><h3>Signal Engine</h3><span class="status-chip ok">ONLINE</span></div>
+          <div id="signalBox">${signalCard(sig,price,A)}</div>
+          <div class="mini-signal-grid">
+            <div><span>EMA trend</span><b class="green">Bullish</b></div>
+            <div><span>RSI</span><b>${R.toFixed(1)}</b></div>
+            <div><span>Volatility</span><b>${fmt(A)}</b></div>
+          </div>
+        </div>
+
+        <div class="card watch-pro">
+          <div class="side-head"><h3>Markets</h3><span class="status-chip ok">LIVE</span></div>
+          <div class="watch">${watchRows()}</div>
+        </div>
+      </aside>
     </div>
+
+    <div class="terminal-metrics">
+      ${kpi("24h Change",pct(m.t.change),"Exchange market data",m.t.change>=0?"green":"red")}
+      ${kpi("RSI",R.toFixed(2),"14-period momentum")}
+      ${kpi("ATR",fmt(A),"Current volatility")}
+      ${kpi("Paper Balance",money(state.balance),"Live orders disabled")}
+    </div>
+    <div class="card open-positions-card"><div class="card-head"><h3>Open Positions</h3><span class="status-chip ok">${positionCount()} OPEN</span></div><div class="positions-list">${openPositionRows()}</div></div>
     <div class="grid bottom-grid">
       <div class="card position-card">
         <div class="card-head"><h3>Portfolio Risk</h3><span class="status-chip ok">LOW RISK</span></div>
@@ -195,8 +450,77 @@ function pageDashboard(){
   const quick=$("quickSearch"); if(quick){ quick.onkeydown=e=>{ if(e.key==="Enter"){ const q=quick.value.trim().toUpperCase().replace("/",""); if(q==="BTCUSDT"||q==="ETHUSDT"){state.symbol=q;refresh()} else toast("Try BTCUSDT or ETHUSDT"); } }; }
   $("tf").value=state.timeframe;
   $("tf").onchange=async e=>{state.timeframe=e.target.value;await refresh()};
+
   $("fullRefresh").onclick=refresh;
+
+  document.querySelectorAll(".tf-btn").forEach(btn=>{
+    btn.onclick=async()=>{
+      document.querySelectorAll(".tf-btn").forEach(x=>x.classList.remove("active"));
+      btn.classList.add("active");
+      state.timeframe=btn.dataset.tf;
+      await refresh();
+    };
+  });
+
+  let proSide="BUY";
+  const proExecute=$("proExecute");
+  const proAmount=$("proAmount");
+
+  function updateProTicket(){
+    const live=state.markets[state.symbol]?.t?.price||price;
+    if($("proOrderPrice")) $("proOrderPrice").textContent=money(live);
+    if(proExecute){
+      proExecute.textContent=proSide==="BUY"?"BUY PAPER":"SELL PAPER";
+      proExecute.classList.toggle("sell",proSide==="SELL");
+      proExecute.classList.toggle("buy",proSide==="BUY");
+    }
+  }
+
+  $("proBuyTab")?.addEventListener("click",()=>{
+    proSide="BUY";
+    $("proBuyTab").classList.add("active");
+    $("proSellTab").classList.remove("active");
+    updateProTicket();
+  });
+
+  $("proSellTab")?.addEventListener("click",()=>{
+    proSide="SELL";
+    $("proSellTab").classList.add("active");
+    $("proBuyTab").classList.remove("active");
+    updateProTicket();
+  });
+
+  proExecute?.addEventListener("click",()=>{
+    const oldAmount=$("amount")?.value;
+    if($("amount") && proAmount) $("amount").value=proAmount.value;
+    paperOrder(proSide);
+    if($("amount")) $("amount").value=oldAmount||100;
+    updateProTicket();
+  });
+
+  updateProTicket();
+
+  $("zoomIn").onclick=()=>{
+    state.chartZoom=Math.min(5,+(state.chartZoom+0.5).toFixed(1));
+    localStorage.setItem("cb_chart_zoom",state.chartZoom);
+    if(tvChart) tvChart.timeScale().applyOptions({barSpacing:Math.min(14,7*state.chartZoom)});
+    chartSvg(m.candles);
+  };
+  $("zoomOut").onclick=()=>{
+    state.chartZoom=Math.max(.5,+(state.chartZoom-.5).toFixed(1));
+    localStorage.setItem("cb_chart_zoom",state.chartZoom);
+    if(tvChart) tvChart.timeScale().applyOptions({barSpacing:Math.max(3,7*state.chartZoom)});
+    chartSvg(m.candles);
+  };
+  $("zoomReset").onclick=()=>{
+    state.chartZoom=1;
+    localStorage.setItem("cb_chart_zoom",1);
+    if(tvChart) tvChart.timeScale().fitContent();
+    chartSvg(m.candles);
+  };
+  $("chartFullscreen").onclick=async()=>{const card=$("chartCard");try{if(!document.fullscreenElement)await card.requestFullscreen();else await document.exitFullscreen();setTimeout(()=>chartSvg(m.candles),100)}catch(e){toast("Full screen unavailable")}};
   chartSvg(m.candles);
+  startLiveStream();
 }
 function winRate(){if(!state.trades.length)return "0.0";return (state.trades.filter(x=>+x.pnl>0).length/state.trades.length*100).toFixed(1)}
 function drawdown(){let eq=state.balance,peak=eq,max=0;for(const t of state.trades){eq+=+t.pnl||0;peak=Math.max(peak,eq);max=Math.max(max,(peak-eq)/peak*100)}return max.toFixed(1)}
@@ -206,28 +530,40 @@ function pageMarkets(){
 }
 function pageTrade(){
   const m=state.markets[state.symbol],price=m.t.price,A=atr(m.candles);
-  $("trade").innerHTML=`<div class="hero"><div><h1>Paper Trading</h1><p>Simulate entries and exits. No exchange orders are sent.</p></div></div>
-  <div class="grid trade-layout"><div class="card"><div class="card-head"><h3>Trade Plan</h3></div><div id="tradeSignal">${signalCard(signal(m.candles),price,A)}</div></div>
-  <div class="card"><div class="card-head"><h3>Paper Order</h3></div><div class="order-panel">
+  const pos=state.positions.filter(p=>p.symbol===state.symbol);
+  const liveRows=pos.map(p=>{const pnl=(price-p.entry)*(p.amount/p.entry);return `<div class="metric-mini"><span>${p.side} · ${money(p.amount)}</span><strong class="${pnl>=0?"green":"red"}">${pnl>=0?"+":""}${money(pnl)}</strong></div>`}).join("")||'<div class="empty">No open position for this pair.</div>';
+  $("trade").innerHTML=`<div class="hero-pro"><div><h1>Trading Terminal</h1><p>Paper execution with live public market pricing.</p></div><div class="hero-right"><div class="live-badge"><i></i> MARKET LIVE</div><span class="status-chip ok">ORDERS SIMULATED</span></div></div>
+  <div class="grid trade-layout"><div class="card"><div class="card-head"><h3>${state.symbol.replace("USDT","/USDT")} · Live Price</h3><span class="status-chip ok">${money(price)}</span></div><div id="tradeSignal">${signalCard(signal(m.candles),price,A)}</div><div class="section-title">Open position</div>${liveRows}</div>
+  <div class="card"><div class="card-head"><h3>Order Ticket</h3><span class="status-chip warn">PAPER</span></div><div class="order-panel">
   <div class="field"><label>Market</label><select id="orderSymbol"><option>BTCUSDT</option><option>ETHUSDT</option></select></div>
-  <div class="field"><label>Amount (USDT)</label><input id="amount" type="number" value="100" min="1"></div>
-  <div class="field"><label>Risk per trade</label><select><option>1%</option><option>0.5%</option><option>2%</option></select></div>
+  <div class="field"><label>Amount (USDT)</label><input id="amount" type="number" value="100" min="1" step="1"></div>
+  <div class="field"><label>Risk per trade</label><select id="riskSelect"><option>0.5%</option><option selected>1%</option><option>2%</option></select></div>
   <div class="order-buttons"><button class="buy-btn" id="paperBuy">BUY PAPER</button><button class="sell-btn" id="paperSell">SELL PAPER</button></div>
-  <div class="small-muted">Starting balance: ${money(state.balance)} · This is a simulator.</div>
-  </div></div></div>`;
+  <div class="small-muted">Balance: ${money(state.balance)} · Live exchange orders are disabled.</div></div></div></div>
+  <div class="card" style="margin-top:14px"><div class="card-head"><h3>Recent Orders</h3><span class="status-chip">LOCAL JOURNAL</span></div><div class="table-wrap"><table class="table"><thead><tr><th>Time</th><th>Pair</th><th>Side</th><th>Entry</th><th>Status</th></tr></thead><tbody>${state.trades.slice(0,8).map(t=>`<tr><td>${t.time}</td><td>${t.symbol.replace("USDT","/USDT")}</td><td>${t.side}</td><td>${money(t.entry)}</td><td><span class="badge2 ${t.status==="OPEN"?"":t.pnl>=0?"win":"loss"}">${t.status||"CLOSED"}</span></td></tr>`).join("")||'<tr><td colspan="5" class="empty">No orders yet.</td></tr>'}</tbody></table></div></div>`;
   $("orderSymbol").value=state.symbol;
+  $("orderSymbol").onchange=e=>{state.symbol=e.target.value;render()};
   $("paperBuy").onclick=()=>paperOrder("BUY");
   $("paperSell").onclick=()=>paperOrder("SELL");
 }
 function paperOrder(side){
-  const amount=+($("amount").value||100), m=state.markets[state.symbol], price=m.t.price;
-  if(side==="BUY" && amount>state.balance){toast("Not enough paper balance");return}
-  const pnl=side==="SELL"?Number((Math.random()*20-8).toFixed(2)):0;
-  if(side==="BUY")state.balance-=amount;else state.balance+=amount+pnl;
-  state.trades.unshift({time:new Date().toLocaleString(),symbol:state.symbol,side,entry:price,pnl});
-  localStorage.setItem("cb_balance",state.balance);localStorage.setItem("cb_trades",JSON.stringify(state.trades));
-  toast(`${side} paper order recorded`);
-  render();
+  const amount=+($("amount").value||100),m=state.markets[state.symbol],price=m.t.price;
+  if(amount<=0){toast("Enter a valid amount");return}
+  if(side==="BUY"){
+    if(amount>state.balance){toast("Not enough paper balance");return}
+    state.balance-=amount;
+    state.positions.unshift({id:Date.now(),time:new Date().toLocaleString(),symbol:state.symbol,side:"BUY",entry:price,amount});
+    state.trades.unshift({time:new Date().toLocaleString(),symbol:state.symbol,side:"BUY",entry:price,pnl:0,status:"OPEN"});
+    toast(`BUY opened at ${money(price)}`);
+  }else{
+    const index=state.positions.findIndex(p=>p.symbol===state.symbol);
+    if(index===-1){toast("No open position for this pair");return}
+    const p=state.positions[index],pnl=Number(((price-p.entry)*(p.amount/p.entry)).toFixed(2));
+    state.balance+=p.amount+pnl;state.positions.splice(index,1);
+    state.trades.unshift({time:new Date().toLocaleString(),symbol:state.symbol,side:"SELL",entry:price,pnl,status:"CLOSED"});
+    toast(`Position closed ${pnl>=0?"+":""}${money(pnl)}`);
+  }
+  localStorage.setItem("cb_balance",state.balance);localStorage.setItem("cb_trades",JSON.stringify(state.trades));localStorage.setItem("cb_positions",JSON.stringify(state.positions));render();
 }
 function pageAnalytics(){
   const pnl=state.trades.map(x=>+x.pnl||0), total=pnl.reduce((a,b)=>a+b,0), wins=pnl.filter(x=>x>0), losses=pnl.filter(x=>x<0);
@@ -244,10 +580,10 @@ function drawEquity(){
   ctx.strokeStyle="#4b8dff";ctx.lineWidth=2;ctx.beginPath();vals.forEach((v,i)=>i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v)));ctx.stroke();
 }
 function pageJournal(){
-  const rows=state.trades.map(t=>`<tr><td>${t.time}</td><td>${t.symbol.replace("USDT","/USDT")}</td><td>${t.side}</td><td>${money(t.entry)}</td><td class="${+t.pnl>=0?"green":"red"}">${money(t.pnl)}</td><td><span class="badge2 ${+t.pnl>=0?"win":"loss"}">${+t.pnl>=0?"WIN":"LOSS"}</span></td></tr>`).join("");
+  const rows=state.trades.map(t=>`<tr><td>${t.time}</td><td>${t.symbol.replace("USDT","/USDT")}</td><td>${t.side}</td><td>${money(t.entry)}</td><td class="${t.status==="OPEN"?"":(+t.pnl>=0?"green":"red")}">${t.status==="OPEN"?"OPEN":money(t.pnl)}</td><td><span class="badge2 ${t.status==="OPEN"?"":(+t.pnl>=0?"win":"loss")}">${t.status==="OPEN"?"OPEN":(+t.pnl>=0?"WIN":"LOSS")}</span></td></tr>`).join("");
   $("journal").innerHTML=`<div class="hero"><div><h1>Trade Journal</h1><p>Paper trades stored locally in your browser.</p></div><button class="btn" id="clearJournal">Clear Journal</button></div>
   <div class="card">${rows?`<div class="table-wrap"><table class="table"><thead><tr><th>Time</th><th>Pair</th><th>Side</th><th>Entry</th><th>P&L</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>`:`<div class="empty">No paper trades yet. Use the Trade page to simulate one.</div>`}</div>`;
-  $("clearJournal").onclick=()=>{if(confirm("Clear local paper-trade journal?")){state.trades=[];localStorage.removeItem("cb_trades");render()}};
+  $("clearJournal").onclick=()=>{if(confirm("Clear local paper-trade journal?")){state.trades=[];state.positions=[];localStorage.removeItem("cb_trades");localStorage.removeItem("cb_positions");render()}};
 }
 function render(){
   ["dashboard","markets","trade","analytics","journal"].forEach(x=>$(x).classList.remove("active"));
@@ -264,6 +600,7 @@ async function refresh(){
     await Promise.all(["BTCUSDT","ETHUSDT"].map(loadSymbol));
     renderHeader(state.markets[state.symbol].t);
     render();
+    startLiveStream();
   }catch(e){
     console.error("CryptoBot UI error:", e);
     const pages = ["dashboard","markets","trade","analytics","journal"];
@@ -279,9 +616,18 @@ async function refresh(){
 }
 document.querySelectorAll(".nav").forEach(b=>b.onclick=()=>{document.querySelectorAll(".nav").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()});
 $("refreshBtn").onclick=refresh;
-window.addEventListener("resize",()=>{if($("chart"))chartSvg(state.markets[state.symbol].candles);if($("equity"))drawEquity()});
+window.addEventListener("resize",()=>{if(tvChart&&$("chart"))tvChart.resize($("chart").clientWidth,$("chart").clientHeight);if($("equity"))drawEquity()});
 refresh();
-setInterval(refresh,30000);
+setInterval(async()=>{try{const t=await fetchTicker(state.symbol);state.markets[state.symbol].t=t;renderHeader(t);render()}catch(e){console.warn("Live ticker refresh failed",e)}},5000);
+setInterval(async()=>{
+    try{
+      const live=await fetchTicker(state.symbol);
+      if(state.markets[state.symbol]){
+        state.markets[state.symbol].t=live;
+      }
+      render();
+    }catch(e){}
+  },1000);
 
 document.addEventListener("keydown", e => {
   if (e.target && ["INPUT","SELECT","TEXTAREA"].includes(e.target.tagName)) return;
@@ -290,3 +636,5 @@ document.addEventListener("keydown", e => {
   if (e.key==="2") {document.querySelector('[data-page="trade"]')?.click();}
   if (e.key==="3") {document.querySelector('[data-page="analytics"]')?.click();}
 });
+
+window.addEventListener("beforeunload",closeLiveStream);

@@ -71,3 +71,147 @@ main{margin-left:238px;min-width:0;flex:1}.topbar{height:68px;border-bottom:1px 
 .notice{font-size:9px;color:#5f6d80;line-height:1.5;margin-top:10px}
 @media(max-width:1200px){.pro-grid{grid-template-columns:1fr}.pro-bottom{grid-template-columns:1fr 1fr}.hero-pro{align-items:flex-start}.hero-right{margin-top:3px}}
 @media(max-width:700px){.hero-pro{display:block}.hero-right{margin-top:12px}.pro-bottom{grid-template-columns:1fr}.chart-top{display:block}.chart-controls{margin-top:8px}}
+
+/* ===== LIVE MARKET TERMINAL POLISH ===== */
+.open-positions-card{margin-top:14px}.positions-list{display:grid;gap:2px}.position-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}.position-row:last-child{border-bottom:0}.position-row>div:first-child{display:grid;gap:4px}.position-row small{color:var(--muted);font-size:10px}.position-right{text-align:right;display:grid;gap:4px}.side-tag{font-size:8px;font-weight:900;padding:3px 5px;border-radius:4px;margin-left:6px}.side-tag.buy{background:#0d2a1d;color:#66e8a6}.chart-controls{display:flex;gap:4px;align-items:center}.chart-controls .tool{cursor:pointer;min-width:31px;text-align:center}.chart-card:fullscreen{background:#080e16;padding:18px;overflow:auto}.chart-card:fullscreen #chart{height:calc(100vh - 90px)}
+
+/* Professional terminal controls */
+.terminal-chart-toolbar{display:flex;align-items:center;gap:5px;padding:8px 10px;border-top:1px solid #182535;border-bottom:1px solid #182535;background:#0d141d}
+.toolbar-label{font-size:10px;color:#65748a;font-weight:700;letter-spacing:.08em;margin-right:4px}
+.tf-btn{border:1px solid #223246;background:#101923;color:#8d9bae;border-radius:5px;padding:5px 9px;font-size:11px;cursor:pointer}
+.tf-btn:hover,.tf-btn.active{background:#172638;color:#e8f0f8;border-color:#36516e}
+.pro-order-card{min-width:280px}
+.live-dot{font-size:9px;font-weight:800;color:#2bd481}
+.live-dot:before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:#2bd481;margin-right:5px;box-shadow:0 0 8px rgba(43,212,129,.7)}
+.order-side-toggle{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:8px 0 12px}
+.order-side{border:1px solid #26384d;background:#101923;color:#91a0b3;padding:9px;border-radius:6px;font-weight:800;cursor:pointer}
+.order-side.buy.active{background:#123125;color:#2bd481;border-color:#246c4b}
+.order-side.sell.active{background:#321821;color:#ff6d82;border-color:#713445}
+.order-quote{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #182535;margin-bottom:12px}
+.order-quote span,.order-summary span{color:#738296;font-size:11px}
+.order-quote strong{font-size:18px}
+.pro-order-card .label{display:block;margin:8px 0 5px}
+.pro-order-card .input{width:100%;box-sizing:border-box}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.order-summary{margin:12px 0;padding:10px;background:#0d141d;border:1px solid #182535;border-radius:6px}
+.order-summary div{display:flex;justify-content:space-between;padding:4px 0}
+.order-summary strong{font-size:11px}
+.pro-execute{width:100%;border:0;border-radius:6px;padding:12px;font-weight:900;cursor:pointer}
+.pro-execute.buy{background:#1c8a59;color:#fff}
+.pro-execute.sell{background:#b43d55;color:#fff}
+.order-warning{text-align:center;color:#65748a;font-size:9px;margin-top:9px;line-height:1.4}
+@media (min-width:1100px){#dashboard .layout{grid-template-columns:minmax(0,1fr) 300px}}
+@media (max-width:900px){.terminal-chart-toolbar{overflow:auto}.two-col{grid-template-columns:1fr}}
+
+/* Live chart mode */
+#chart{transition:opacity .12s ease}
+.live-market-pulse{animation:marketPulse .7s ease}
+@keyframes marketPulse{0%{opacity:.65}100%{opacity:1}}
+
+/* ===== Live Market Terminal / Mobile ===== */
+.terminal-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+.pro-chart{min-width:0;overflow:hidden}
+.chart-topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #182535}
+.symbol-line{display:flex;align-items:center;gap:8px;font-size:14px}
+.symbol-dot{width:8px;height:8px;border-radius:50%;background:#2bd481;box-shadow:0 0 9px rgba(43,212,129,.75)}
+.market-live{font-size:9px;font-weight:800;color:#2bd481;border:1px solid #235d43;padding:3px 6px;border-radius:4px}
+.live-price-line{display:flex;align-items:baseline;gap:10px;margin-top:5px}
+.live-price-line #livePrice{font-size:25px;font-weight:850;letter-spacing:-.02em}
+.live-price-line #liveChange{font-size:12px;font-weight:700}
+.chart-actions{display:flex;gap:5px}
+.timeframe-bar{display:flex;align-items:center;gap:5px;padding:8px 10px;border-bottom:1px solid #182535;overflow:auto}
+.timeframe-bar .tf-btn{border:1px solid #223246;background:#101923;color:#8d9bae;border-radius:5px;padding:6px 10px;font-size:11px;cursor:pointer}
+.timeframe-bar .tf-btn.active{background:#17314a;color:#fff;border-color:#3b6488}
+.stream-status{margin-left:auto;white-space:nowrap;color:#2bd481;font-size:9px;font-weight:800;letter-spacing:.06em}
+.stream-status i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#2bd481;box-shadow:0 0 8px rgba(43,212,129,.8);margin-right:5px}
+.stream-status .offline-dot{background:#ffbd4a;box-shadow:none}
+.chart-stage{height:500px;position:relative;background:#0a1018}
+.chart-stage canvas{width:100%;height:100%;display:block}
+.chart-live-line{position:absolute;right:12px;top:12px;pointer-events:none}
+.chart-live-line span{font-size:8px;color:#2bd481;border:1px solid #235d43;border-radius:4px;padding:3px 5px;background:#0b1512}
+.chart-footer{display:flex;gap:18px;padding:8px 12px;color:#64748a;font-size:9px;border-top:1px solid #182535}
+.ema-blue{color:#55a1ff}.ema-orange{color:#ffb24a}
+.terminal-side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.order-ticket-pro,.signal-pro,.watch-pro{min-width:0}
+.side-head{display:flex;justify-content:space-between;align-items:center}
+.side-head h3{margin:0}
+.paper-badge{font-size:9px;font-weight:800;color:#8fb2d1;background:#132233;border:1px solid #25445e;border-radius:4px;padding:3px 6px}
+.side-price{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid #182535;margin-bottom:12px}
+.side-price span{font-size:11px;color:#718097}.side-price strong{font-size:18px}
+.ticket-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:12px 0}
+.ticket-stats div{background:#0d141d;border:1px solid #182535;border-radius:5px;padding:7px}
+.ticket-stats span{display:block;color:#66758a;font-size:9px}.ticket-stats b{font-size:11px}
+.mini-signal-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+.mini-signal-grid div{background:#0d141d;border:1px solid #182535;border-radius:5px;padding:8px}
+.mini-signal-grid span{display:block;color:#68778b;font-size:9px}.mini-signal-grid b{font-size:11px}
+.terminal-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+@media(max-width:1050px){
+  .terminal-grid{grid-template-columns:1fr}
+  .terminal-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .watch-pro{grid-column:1/-1}
+}
+@media(max-width:700px){
+  .terminal-grid{display:block}
+  .terminal-side{display:flex;margin-top:10px}
+  .chart-topbar{padding:10px 11px}
+  .symbol-line{font-size:12px}
+  .live-price-line #livePrice{font-size:20px}
+  .chart-actions .tool{min-width:31px;padding:6px 7px}
+  .chart-stage{height:380px}
+  .chart-footer{overflow:auto;white-space:nowrap}
+  .terminal-metrics{grid-template-columns:1fr 1fr}
+  .terminal-metrics .card{min-width:0}
+  .ticket-stats{grid-template-columns:1fr 1fr 1fr}
+  .two-col{grid-template-columns:1fr}
+  .order-side{padding:11px}
+  .timeframe-bar{padding:7px}
+  .timeframe-bar .tf-btn{padding:7px 10px}
+}
+@media(max-width:430px){
+  .chart-stage{height:330px}
+  .live-price-line #livePrice{font-size:18px}
+  .terminal-metrics{gap:7px}
+}
+
+/* ===== TradingView-inspired chart surface ===== */
+.chart-stage{height:560px;position:relative;background:#0b0f14;overflow:hidden}
+.chart-stage #chart{width:100%;height:100%}
+.pro-chart{background:#0b0f14;border:1px solid #202a36}
+.pro-chart .card-head{background:#0b0f14}
+.chart-topbar{background:#0b0f14}
+.timeframe-bar{background:#0b0f14}
+.chart-footer{background:#0b0f14}
+.chart-actions .tool{background:#111820;border-color:#26313e}
+.chart-actions .tool:hover{background:#18212b}
+.tv-toolbar{
+  display:flex;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid #202a36;
+  background:#0b0f14;color:#8996a6
+}
+.tv-toolbar button{background:transparent;border:0;color:#8996a6;padding:5px 7px;border-radius:4px;cursor:pointer}
+.tv-toolbar button:hover{background:#18212b;color:#e6edf5}
+@media(max-width:700px){
+  .chart-stage{height:430px}
+}
+@media(max-width:430px){
+  .chart-stage{height:360px}
+}
+
+@media(max-width:800px){
+  .app{display:block}
+  .sidebar{
+    position:fixed;z-index:100;left:0;right:0;bottom:0;top:auto;width:auto;height:58px;
+    display:flex;align-items:center;padding:5px 7px;border-right:0;border-top:1px solid #202a36;
+    background:#0b0f14;
+  }
+  .sidebar .brand,.sidebar .mode-pill,.sidebar .sidebar-bottom{display:none}
+  .sidebar nav{display:flex;width:100%;justify-content:space-around;gap:3px}
+  .sidebar nav .nav{min-width:0;flex:1;padding:7px 3px;font-size:10px;justify-content:center}
+  .sidebar nav .nav span{display:block}
+  main{margin-left:0;padding-bottom:62px}
+  .topbar{padding:8px 10px}
+  .top-actions .update{display:none}
+  .market-title{min-width:0}
+  .market-title strong{font-size:12px}
+  .market-title span{font-size:11px}
+  .content{padding:8px}
+}
